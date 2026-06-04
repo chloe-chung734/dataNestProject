@@ -82,8 +82,24 @@ user=<user>
 password=<password>
 ```
 
+## Java application (console shell)
+
+**Team UI / integration guide:** [javaUI.md](javaUI.md) — layers, fixed menu numbers (1–10), service method names, roles.
+
+**Windows:** `compile.bat` then `run.bat` (requires JDK on PATH).
+
+**Linux / macOS** — from the project root:
+
+```bash
+javac -d out -sourcepath src src/delivery/Main.java src/delivery/util/ConsoleUI.java src/delivery/menu/*.java src/delivery/service/*.java
+java -cp out delivery.Main
+```
+
+Package layout (`menu` = UI, `service` = business logic, `db` = JDBC, `model` = entity): see [javaUI.md](javaUI.md).
+
 ## Files
 
+- `javaUI.md`: Console app layers, menu numbers, service method names, integration workflow.
 - `createschema.sql`: MySQL schema definition.
 - `initdata.sql`: MySQL sample data inserts.
 - `dropschema.sql`: Drop all tables.
