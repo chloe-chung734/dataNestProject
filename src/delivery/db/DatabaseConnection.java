@@ -10,7 +10,7 @@ public class DatabaseConnection {
     
     private static final String URL = "jdbc:mysql://localhost:3306/ewha?useSSL=false&allowPublicKeyRetrieval=true";
     private static final String USER = "root";
-    private static final String PASSWORD = "Ajjk03251308!";  // add your password
+    private static final String PASSWORD = "yourpassword!";  // add your password
     
     public static Connection getConnection() throws SQLException {
         if (connection == null || connection.isClosed()) {
