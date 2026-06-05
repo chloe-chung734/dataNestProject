@@ -1,64 +1,190 @@
 package delivery.service;
 
+import delivery.db.DatabaseConnection;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.util.Scanner;
 
 public final class CustomerService {
-
-    private CustomerService() { }
-
-    public static void insertCustomer(Connection conn, Scanner scanner) {
-        System.out.println("\n=== [Menu 1] Register New Customer ===");
-
-        System.out.print("Enter First Name: ");
-        String firstName = scanner.nextLine();
-
-        System.out.print("Enter Last Name: ");
-        String lastName = scanner.nextLine();
-
-        System.out.print("Enter Email Address: ");
-        String email = scanner.nextLine();
-
-        System.out.print("Enter Phone Number: ");
-        String phone = scanner.nextLine();
-
-        System.out.print("Enter City: ");
-        String city = scanner.nextLine();
-
-        System.out.print("Enter Age: ");
-        int age = scanner.nextInt();
-        scanner.nextLine(); // clear buffer
-
-        System.out.print("Enter Gender: ");
-        String gender = scanner.nextLine();
-
-        String sql = "INSERT INTO ewha.customer (first_name, last_name, email, phone, city, age, gender) VALUES (?, ?, ?, ?, ?, ?, ?)";
-
-        try (PreparedStatement pstmt = conn.prepareStatement(sql)) {
-            pstmt.setString(1, firstName);
-            pstmt.setString(2, lastName);
-            pstmt.setString(3, email);
-            pstmt.setString(4, phone);
-            pstmt.setString(5, city);
-            pstmt.setInt(6, age);
-            pstmt.setString(7, gender);
-
-            int rowsInserted = pstmt.executeUpdate();
-            if (rowsInserted > 0) {
-                System.out.println("✅ Success: Customer registered perfectly!");
+    
+    private static Scanner scanner = new Scanner(System.in);
+    
+    private CustomerService() {}
+    
+    // MENU 7: Update Customer Information
+    public static void updateCustomer() {
+        System.out.println("\n=== UPDATE CUSTOMER ===");
+        
+        try (Connection conn = DatabaseConnection.getConnection()) {
+            int customerId = getIntInput("Enter customer ID to update: ");
+            
+            // Check if customer exists
+            if (!customerExists(conn, customerId)) {
+                System.out.println("Customer ID " + customerId + " not found.");
+                return;
             }
+            
+            System.out.println("\nWhat would you like to update?");
+            System.out.println("1. City");
+            System.out.println("2. Age");
+            System.out.println("3. Both");
+            int choice = getIntInput("Choice: ");
+            
+            String newCity = null;
+            Integer newAge = null;
+            
+            if (choice == 1 || choice == 3) {
+                newCity = getStringInput("Enter new city: ");
+            }
+            if (choice == 2 || choice == 3) {
+                newAge = getIntInput("Enter new age: ");
+            }
+            
+            // Start transaction
+            conn.setAutoCommit(false);
+            
+            // Update customer table
+            if (newCity != null) {
+                String sql = "UPDATE customer SET city = ? WHERE id = ?";
+                try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+                    stmt.setString(1, newCity);
+                    stmt.setInt(2, customerId);
+                    stmt.executeUpdate();
+                }
+            }
+            
+            if (newAge != null) {
+                String sql = "UPDATE customer SET age = ? WHERE id = ?";
+                try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+                    stmt.setInt(1, newAge);
+                    stmt.setInt(2, customerId);
+                    stmt.executeUpdate();
+                }
+            }
+            
+            // Insert into demographic history 
+            String ageRange = getAgeRange(newAge != null ? newAge : getCurrentAge(conn, customerId));
+            String gender = getCurrentGender(conn, customerId);
+            String city = newCity != null ? newCity : getCurrentCity(conn, customerId);
+            
+            String historySql = "INSERT INTO customer_demographic_history (customer_id, city, age_range, gender, start_date, end_date) VALUES (?, ?, ?, ?, CURRENT_DATE, NULL)";
+            try (PreparedStatement stmt = conn.prepareStatement(historySql)) {
+                stmt.setInt(1, customerId);
+                stmt.setString(2, city);
+                stmt.setString(3, ageRange);
+                stmt.setString(4, gender);
+                stmt.executeUpdate();
+            }
+            
+            conn.commit();
+            System.out.println("\n✓ Customer updated successfully!");
+            
         } catch (SQLException e) {
-            System.out.println("❌ Database Error: " + e.getMessage());
+            System.err.println("Error updating customer: " + e.getMessage());
         }
     }
-
-    public static void updateCustomer() {
-        throw new UnsupportedOperationException("CustomerService.updateCustomer - not implemented yet");
-    }
-
+    
+    // MENU 9: Delete Customer
     public static void deleteCustomer() {
-        throw new UnsupportedOperationException("CustomerService.deleteCustomer - not implemented yet");
+        System.out.println("\n=== DELETE CUSTOMER ===");
+        
+        try (Connection conn = DatabaseConnection.getConnection()) {
+            int customerId = getIntInput("Enter customer ID to delete: ");
+            
+            if (!customerExists(conn, customerId)) {
+                System.out.println("Customer ID " + customerId + " not found.");
+                return;
+            }
+            
+            String confirm = getStringInput("WARNING: This will delete all orders for this customer. Continue? (yes/no): ");
+            
+            if (!confirm.equalsIgnoreCase("yes")) {
+                System.out.println("Delete cancelled.");
+                return;
+            }
+            
+            conn.setAutoCommit(false);
+            
+            // Delete customer
+            String sql = "DELETE FROM customer WHERE id = ?";
+            try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+                stmt.setInt(1, customerId);
+                int rows = stmt.executeUpdate();
+                
+                if (rows > 0) {
+                    conn.commit();
+                    System.out.println("\n✓ Customer deleted successfully!");
+                } else {
+                    conn.rollback();
+                    System.out.println("Delete failed.");
+                }
+            }
+            
+        } catch (SQLException e) {
+            System.err.println("Error deleting customer: " + e.getMessage());
+        }
+    }
+    
+    // HELPER METHODS 
+    
+    private static boolean customerExists(Connection conn, int customerId) throws SQLException {
+        String sql = "SELECT 1 FROM customer WHERE id = ?";
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setInt(1, customerId);
+            return stmt.executeQuery().next();
+        }
+    }
+    
+    private static String getCurrentCity(Connection conn, int customerId) throws SQLException {
+        String sql = "SELECT city FROM customer WHERE id = ?";
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setInt(1, customerId);
+            var rs = stmt.executeQuery();
+            if (rs.next()) return rs.getString("city");
+        }
+        return null;
+    }
+    
+    private static int getCurrentAge(Connection conn, int customerId) throws SQLException {
+        String sql = "SELECT age FROM customer WHERE id = ?";
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setInt(1, customerId);
+            var rs = stmt.executeQuery();
+            if (rs.next()) return rs.getInt("age");
+        }
+        return 0;
+    }
+    
+    private static String getCurrentGender(Connection conn, int customerId) throws SQLException {
+        String sql = "SELECT gender FROM customer WHERE id = ?";
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setInt(1, customerId);
+            var rs = stmt.executeQuery();
+            if (rs.next()) return rs.getString("gender");
+        }
+        return null;
+    }
+    
+    private static String getAgeRange(int age) {
+        int lower = (age / 10) * 10;
+        int upper = lower + 9;
+        return lower + "-" + upper;
+    }
+    
+    private static int getIntInput(String prompt) {
+        System.out.print(prompt);
+        while (!scanner.hasNextInt()) {
+            System.out.print("Invalid. Enter a number: ");
+            scanner.next();
+        }
+        int result = scanner.nextInt();
+        scanner.nextLine();
+        return result;
+    }
+    
+    private static String getStringInput(String prompt) {
+        System.out.print(prompt);
+        return scanner.nextLine();
     }
 }

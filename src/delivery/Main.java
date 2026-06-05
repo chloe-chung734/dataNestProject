@@ -45,6 +45,7 @@ public class Main {
                     case 10 -> OrderMenu.deleteOrder();
                     case 0 -> {
                         System.out.println("Goodbye.");
+                        delivery.db.DatabaseConnection.closeConnection();
                         running = false;
                     }
                     default -> System.out.println(ConsoleUI.INVALID_CHOICE_MESSAGE);
