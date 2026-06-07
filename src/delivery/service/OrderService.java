@@ -4,6 +4,7 @@ import delivery.db.DatabaseConnection;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.util.Scanner;
 
 public final class OrderService {
@@ -11,6 +12,30 @@ public final class OrderService {
     private static Scanner scanner = new Scanner(System.in);
     
     private OrderService() {}
+    
+    // MENU 2: Insert Order
+    public static void insertOrder() {
+        System.out.println("\n=== INSERT ORDER ===");
+        
+        try (Connection conn = DatabaseConnection.getConnection()) {
+            int customerId = getIntInput("Enter customer ID: ");
+            int restaurantId = getIntInput("Enter restaurant ID: ");
+            Timestamp orderTimestamp = new Timestamp(System.currentTimeMillis());
+            
+            String sql = "INSERT INTO orders (customer_id, restaurant_id, order_timestamp) VALUES (?, ?, ?)";
+            try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+                stmt.setInt(1, customerId);
+                stmt.setInt(2, restaurantId);
+                stmt.setTimestamp(3, orderTimestamp);
+                
+                if (stmt.executeUpdate() > 0) {
+                    System.out.println("\n✓ Order recorded successfully!");
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("Error recording order: " + e.getMessage());
+        }
+    }
     
     // MENU 10: Delete Order
     public static void deleteOrder() {
@@ -51,11 +76,6 @@ public final class OrderService {
         } catch (SQLException e) {
             System.err.println("Error deleting order: " + e.getMessage());
         }
-    }
-    
-    // Stub methods for Role B (they will implement these)
-    public static void insertOrder() {
-        System.out.println("Insert Order - Coming Soon (Team B)");
     }
     
     public static void searchCustomerOrders() {

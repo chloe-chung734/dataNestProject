@@ -12,6 +12,38 @@ public final class CustomerService {
     
     private CustomerService() {}
     
+    // MENU 1: Insert Customer
+    public static void insertCustomer() {
+        System.out.println("\n=== INSERT CUSTOMER ===");
+        
+        try (Connection conn = DatabaseConnection.getConnection()) {
+            String firstName = getStringInput("Enter first name: ");
+            String lastName = getStringInput("Enter last name: ");
+            String email = getStringInput("Enter email: ");
+            String phone = getStringInput("Enter phone: ");
+            String city = getStringInput("Enter city: ");
+            int age = getIntInput("Enter age: ");
+            String gender = getStringInput("Enter gender: ");
+            
+            String sql = "INSERT INTO customer (first_name, last_name, email, phone, city, age, gender) VALUES (?, ?, ?, ?, ?, ?, ?)";
+            try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+                stmt.setString(1, firstName);
+                stmt.setString(2, lastName);
+                stmt.setString(3, email);
+                stmt.setString(4, phone);
+                stmt.setString(5, city);
+                stmt.setInt(6, age);
+                stmt.setString(7, gender);
+                
+                if (stmt.executeUpdate() > 0) {
+                    System.out.println("\n✓ Customer registered successfully!");
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("Error registering customer: " + e.getMessage());
+        }
+    }
+    
     // MENU 7: Update Customer Information
     public static void updateCustomer() {
         System.out.println("\n=== UPDATE CUSTOMER ===");

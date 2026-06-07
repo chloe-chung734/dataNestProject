@@ -8,7 +8,7 @@ public final class CustomerMenu {
     }
 
     public static void insertCustomer() {
-        System.out.println("Insert Customer - Coming Soon");
+        CustomerService.insertCustomer();
     }
 
     public static void updateCustomer() {
