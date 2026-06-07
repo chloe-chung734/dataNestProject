@@ -8,7 +8,7 @@ public final class OrderMenu {
     }
 
     public static void insertOrder() {
-        System.out.println("Insert Order - Coming Soon");
+        OrderService.insertOrder();
     }
 
     public static void deleteOrder() {
