@@ -1,9 +1,7 @@
 package delivery.menu;
 
-/**
- * Reports and analytics.
- * Wire to {@code delivery.service.AnalysisService} when ready.
- */
+import delivery.service.AnalysisService;
+
 public final class AnalysisMenu {
 
     private AnalysisMenu() {
@@ -15,12 +13,10 @@ public final class AnalysisMenu {
     }
 
     public static void priceChangeAnalysis() {
-        System.out.println("Analyze Price Change - Coming Soon");
-        // AnalysisService.priceChangeAnalysis();
+        AnalysisService.priceChangeAnalysis();
     }
 
     public static void customerDemographicsAnalysis() {
-        System.out.println("Analyze Customer Demographics - Coming Soon");
-        // AnalysisService.analyzeCustomerDemographics();
+        AnalysisService.analyzeCustomerDemographics();
     }
 }
