@@ -267,8 +267,125 @@ public final class AnalysisService {
     }
 
 
+    // MENU 4: Search Restaurant Sales
     public static void searchRestaurantSales() {
-        System.out.println("Search Restaurant Sales - Coming Soon");
+        System.out.println("\n========== SEARCH RESTAURANT SALES ==========");
+
+        try (Connection conn = DatabaseConnection.getConnection()) {
+            int restaurantId = getIntInput("Enter restaurant ID: ");
+
+            String restaurantName = getRestaurantName(conn, restaurantId);
+            if (restaurantName == null) {
+                System.out.println("Restaurant ID " + restaurantId + " not found.");
+                pressEnter();
+                return;
+            }
+
+            printRestaurantSalesSummary(conn, restaurantId, restaurantName);
+            printRestaurantItemSales(conn, restaurantId);
+            printRestaurantOrderHistory(conn, restaurantId);
+        } catch (SQLException e) {
+            System.err.println("Error searching restaurant sales: " + e.getMessage());
+        }
+
+        pressEnter();
+    }
+
+    private static void printRestaurantSalesSummary(Connection conn, int restaurantId, String restaurantName)
+            throws SQLException {
+        String sql = """
+                SELECT COUNT(DISTINCT order_id) AS total_orders,
+                       COALESCE(SUM(order_total), 0) AS total_revenue
+                FROM (
+                    SELECT order_id, MAX(final_total) AS order_total
+                    FROM order_details_view
+                    WHERE restaurant_id = ?
+                    GROUP BY order_id
+                ) order_totals
+                """;
+
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setInt(1, restaurantId);
+            ResultSet rs = stmt.executeQuery();
+            if (rs.next()) {
+                System.out.println("\nRestaurant: " + restaurantName + " (ID: " + restaurantId + ")");
+                System.out.println("Total orders: " + rs.getInt("total_orders"));
+                System.out.printf("Total revenue: $%.2f%n", rs.getDouble("total_revenue"));
+            }
+        }
+    }
+
+    private static void printRestaurantItemSales(Connection conn, int restaurantId) throws SQLException {
+        String sql = """
+                SELECT item_name,
+                       SUM(quantity) AS quantity_sold,
+                       SUM(quantity * item_price_at_order) AS item_revenue
+                FROM order_details_view
+                WHERE restaurant_id = ?
+                GROUP BY menu_item_id, item_name
+                ORDER BY item_revenue DESC
+                """;
+
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setInt(1, restaurantId);
+            ResultSet rs = stmt.executeQuery();
+
+            System.out.println("\n----------------------------------------");
+            System.out.println("Item sales breakdown:");
+            boolean hasItems = false;
+            while (rs.next()) {
+                hasItems = true;
+                System.out.printf("  - %s: %d sold, $%.2f revenue%n",
+                        rs.getString("item_name"),
+                        rs.getInt("quantity_sold"),
+                        rs.getDouble("item_revenue"));
+            }
+            if (!hasItems) {
+                System.out.println("  No items sold.");
+            }
+        }
+    }
+
+    private static void printRestaurantOrderHistory(Connection conn, int restaurantId) throws SQLException {
+        String sql = """
+                SELECT order_id, order_timestamp, MAX(final_total) AS final_total
+                FROM order_details_view
+                WHERE restaurant_id = ?
+                GROUP BY order_id, order_timestamp
+                ORDER BY order_timestamp
+                """;
+
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setInt(1, restaurantId);
+            ResultSet rs = stmt.executeQuery();
+
+            System.out.println("\n----------------------------------------");
+            System.out.println("Order history:");
+            boolean hasOrders = false;
+            while (rs.next()) {
+                hasOrders = true;
+                System.out.printf("  - Order #%d on %s: $%.2f%n",
+                        rs.getInt("order_id"),
+                        rs.getString("order_timestamp"),
+                        rs.getDouble("final_total"));
+            }
+            if (!hasOrders) {
+                System.out.println("  No orders found.");
+            }
+            System.out.println("========================================");
+        }
+    }
+
+    private static String getRestaurantName(Connection conn, int restaurantId) throws SQLException {
+        String sql = "SELECT name FROM restaurants WHERE id = ?";
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setInt(1, restaurantId);
+            ResultSet rs = stmt.executeQuery();
+            if (rs.next()) {
+                return rs.getString("name");
+            }
+        }
+        return null;
     }
 }
 

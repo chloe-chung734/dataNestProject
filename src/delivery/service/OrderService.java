@@ -129,8 +129,107 @@ public final class OrderService {
         }
     }
 
+    // MENU 3: Search Customer Orders
     public static void searchCustomerOrders() {
-        System.out.println("Search Customer Orders - Coming Soon (Analytics Team)");
+        System.out.println("\n========== SEARCH CUSTOMER ORDERS ==========");
+
+        try (Connection conn = DatabaseConnection.getConnection()) {
+            int customerId = getIntInput("Enter customer ID: ");
+            if (!customerExists(conn, customerId)) {
+                System.out.println("Customer ID " + customerId + " not found.");
+                pressEnter();
+                return;
+            }
+
+            printCustomerSpendingSummary(conn, customerId);
+
+            String sql = """
+                    SELECT order_id, order_timestamp, restaurant_id, restaurant_name,
+                           subtotal, tax_amount, final_total,
+                           menu_item_id, item_name, quantity, item_price_at_order
+                    FROM order_details_view
+                    WHERE customer_id = ?
+                    ORDER BY order_timestamp, order_id, menu_item_id
+                    """;
+
+            try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+                stmt.setInt(1, customerId);
+                ResultSet rs = stmt.executeQuery();
+
+                int currentOrderId = -1;
+                double subtotal = 0;
+                double taxAmount = 0;
+                double finalTotal = 0;
+                boolean hasOrders = false;
+
+                while (rs.next()) {
+                    hasOrders = true;
+                    int orderId = rs.getInt("order_id");
+
+                    if (orderId != currentOrderId) {
+                        if (currentOrderId != -1) {
+                            printOrderTotals(subtotal, taxAmount, finalTotal);
+                            System.out.println("========================================");
+                        }
+
+                        currentOrderId = orderId;
+                        subtotal = rs.getDouble("subtotal");
+                        taxAmount = rs.getDouble("tax_amount");
+                        finalTotal = rs.getDouble("final_total");
+
+                        System.out.println("\n========================================");
+                        System.out.println("Order ID: " + orderId);
+                        System.out.println("Date: " + rs.getString("order_timestamp"));
+                        System.out.println("Restaurant: " + rs.getString("restaurant_name")
+                                + " (ID: " + rs.getInt("restaurant_id") + ")");
+                        System.out.println("Items:");
+                    }
+
+                    int quantity = rs.getInt("quantity");
+                    double unitPrice = rs.getDouble("item_price_at_order");
+                    System.out.printf("  - %s x%d @ $%.2f = $%.2f%n",
+                            rs.getString("item_name"),
+                            quantity,
+                            unitPrice,
+                            quantity * unitPrice);
+                }
+
+                if (!hasOrders) {
+                    System.out.println("\nNo orders found for this customer.");
+                } else {
+                    printOrderTotals(subtotal, taxAmount, finalTotal);
+                    System.out.println("========================================");
+                }
+            }
+        } catch (SQLException e) {
+            System.err.println("Error searching customer orders: " + e.getMessage());
+        }
+
+        pressEnter();
+    }
+
+    private static void printCustomerSpendingSummary(Connection conn, int customerId) throws SQLException {
+        String sql = """
+                SELECT first_name, last_name, total_orders, total_spent
+                FROM customer_spending_view
+                WHERE customer_id = ?
+                """;
+        try (PreparedStatement stmt = conn.prepareStatement(sql)) {
+            stmt.setInt(1, customerId);
+            ResultSet rs = stmt.executeQuery();
+            if (rs.next()) {
+                System.out.println("\nCustomer: " + rs.getString("first_name") + " " + rs.getString("last_name")
+                        + " (ID: " + customerId + ")");
+                System.out.println("Total orders: " + rs.getInt("total_orders"));
+                System.out.printf("Total spent: $%.2f%n", rs.getDouble("total_spent"));
+            }
+        }
+    }
+
+    private static void printOrderTotals(double subtotal, double taxAmount, double finalTotal) {
+        System.out.printf("Subtotal: $%.2f%n", subtotal);
+        System.out.printf("Tax: $%.2f%n", taxAmount);
+        System.out.printf("Final total: $%.2f%n", finalTotal);
     }
 
     private static List<OrderLine> collectOrderLines(Connection conn) throws SQLException {
@@ -268,5 +367,10 @@ public final class OrderService {
     private static String getStringInput(String prompt) {
         System.out.print(prompt);
         return scanner.nextLine().trim();
+    }
+
+    private static void pressEnter() {
+        System.out.print("\nPress Enter to continue...");
+        scanner.nextLine();
     }
 }
