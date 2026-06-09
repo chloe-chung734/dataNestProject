@@ -133,20 +133,90 @@ ON ewha.customer(city);
 CREATE INDEX idx_restaurant_city
 ON ewha.restaurants(city);
 
--- CREATE VIEW customer_order_summary_view AS
--- SELECT
---     c.id AS customer_id,
---     c.first_name,
---     c.last_name,
---     co.id AS order_id,
---     co.order_timestamp,
---     b.final_total
--- FROM ewha.customer c
--- JOIN ewha.customer_order co ON c.id = co.customer_id
--- JOIN ewha.bill b ON co.id = b.order_id;
+CREATE VIEW ewha.order_details_view AS
+SELECT
+    o.id                                 AS order_id,
+    o.order_timestamp,
+    c.id                                 AS customer_id,
+    c.first_name,
+    c.last_name,
+    c.email,
+    r.id                                 AS restaurant_id,
+    r.name                               AS restaurant_name,
+    r.city                               AS restaurant_city,
+    b.subtotal,
+    b.tax_amount,
+    b.final_total,
+    oi.id                                AS order_item_id,
+    oi.menu_item_id,
+    mi.item_name,
+    oi.quantity,
+    oi.item_price_at_order,
+    oi.quantity * oi.item_price_at_order AS line_subtotal
+FROM ewha.orders o
+JOIN ewha.customer c    ON o.customer_id = c.id
+JOIN ewha.restaurants r ON o.restaurant_id = r.id
+JOIN ewha.bill b        ON b.order_id = o.id
+JOIN ewha.order_item oi ON oi.order_id = o.id
+JOIN ewha.menu_item mi  ON oi.menu_item_id = mi.id;
 
--- CREATE VIEW restaurant_sales_view AS
--- SELECT r.name AS restaurant_name, DATE(co.order_timestamp) AS sales_date, SUM(b.final_total) AS daily_sales FROM ewha.restaurants r
--- JOIN ewha.customer_order co ON r.id = co.restaurant_id
--- JOIN ewha.bill b ON co.id = b.order_id
--- GROUP BY r.name, DATE(co.order_timestamp);
+CREATE VIEW ewha.customer_spending_view AS
+SELECT
+    c.id                             AS customer_id,
+    c.first_name,
+    c.last_name,
+    c.email,
+    c.city,
+    COUNT(DISTINCT o.id)             AS total_orders,
+    COALESCE(SUM(b.final_total), 0)  AS total_spent
+FROM ewha.customer c
+LEFT JOIN ewha.orders o ON o.customer_id = c.id
+LEFT JOIN ewha.bill b   ON b.order_id = o.id
+GROUP BY c.id, c.first_name, c.last_name, c.email, c.city;
+
+CREATE VIEW ewha.v_item_sales_by_price_era AS
+SELECT
+    oi.id                                AS order_item_id,
+    mi.id                                AS menu_item_id,
+    mi.item_name,
+    o.order_timestamp,
+    oi.quantity,
+    oi.item_price_at_order,
+    oi.quantity * oi.item_price_at_order AS line_revenue,
+    mph.old_price                        AS era_old_price,
+    mph.new_price                        AS era_new_price,
+    mph.change_date                      AS price_changed_on,
+    CASE
+        WHEN DATE(o.order_timestamp) < mph.change_date THEN 'before'
+        ELSE 'after'
+    END                                  AS price_era
+FROM ewha.order_item oi
+JOIN ewha.orders o ON oi.order_id = o.id
+JOIN ewha.menu_item mi ON oi.menu_item_id = mi.id
+JOIN ewha.menu_price_history mph ON mph.menu_item_id = mi.id;
+
+CREATE VIEW ewha.v_customer_sales_by_demo AS
+SELECT
+    o.id           AS order_id,
+    o.order_timestamp,
+    c.id           AS customer_id,
+    c.first_name,
+    c.last_name,
+    c.email,
+    b.final_total,
+    cdh.city       AS demo_city,
+    cdh.age_range,
+    cdh.gender,
+    cdh.start_date AS demo_start,
+    cdh.end_date   AS demo_end,
+    CASE
+        WHEN cdh.end_date IS NULL THEN 'current'
+        ELSE 'historical'
+    END            AS demo_status
+FROM ewha.orders o
+JOIN ewha.customer c ON o.customer_id = c.id
+JOIN ewha.bill b     ON o.id = b.order_id
+LEFT JOIN ewha.customer_demographic_history cdh
+    ON cdh.customer_id = c.id
+    AND DATE(o.order_timestamp) >= cdh.start_date
+    AND (cdh.end_date IS NULL OR DATE(o.order_timestamp) <= cdh.end_date);

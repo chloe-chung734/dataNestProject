@@ -8,8 +8,7 @@ public final class AnalysisMenu {
     }
 
     public static void searchRestaurantSales() {
-        System.out.println("Search Restaurant Sales - Coming Soon");
-        // AnalysisService.searchRestaurantSales();
+        AnalysisService.searchRestaurantSales();
     }
 
     public static void priceChangeAnalysis() {
