@@ -1,6 +1,6 @@
 CREATE DATABASE IF NOT EXISTS ewha;
 
-CREATE TABLE ewha.restaurants (
+CREATE TABLE IF NOT EXISTS ewha.restaurants (
     id INT PRIMARY KEY AUTO_INCREMENT,
     name VARCHAR(64) UNIQUE NOT NULL,
     city VARCHAR(64) NOT NULL,
@@ -10,7 +10,7 @@ CREATE TABLE ewha.restaurants (
     CHECK (CHAR_LENGTH(city) >= 2)
 );
 
-CREATE TABLE ewha.customer (
+CREATE TABLE IF NOT EXISTS ewha.customer (
     id INT PRIMARY KEY AUTO_INCREMENT,
     first_name VARCHAR(32) NOT NULL,
     last_name VARCHAR(32) NOT NULL,
@@ -24,7 +24,7 @@ CREATE TABLE ewha.customer (
     CHECK (age >= 0 AND age <= 120)
 );
 
-CREATE TABLE ewha.customer_demographic_history (
+CREATE TABLE IF NOT EXISTS ewha.customer_demographic_history (
     id INT PRIMARY KEY AUTO_INCREMENT,
     customer_id INT NOT NULL,
     city VARCHAR(64),
@@ -37,17 +37,17 @@ CREATE TABLE ewha.customer_demographic_history (
     CHECK (end_date IS NULL OR end_date >= start_date)
 );
 
-CREATE TABLE ewha.menu_category (
+CREATE TABLE IF NOT EXISTS ewha.menu_category (
     id INT PRIMARY KEY AUTO_INCREMENT,
     category_name VARCHAR(32) UNIQUE NOT NULL,
     CHECK (CHAR_LENGTH(category_name) >= 2)
 );
 
-CREATE TABLE ewha.menu_item (
+CREATE TABLE IF NOT EXISTS ewha.menu_item (
     id INT PRIMARY KEY AUTO_INCREMENT,
     category_id INT NOT NULL,
     item_name VARCHAR(32) NOT NULL,
-    price DECIMAL(10,2) NOT NULL,
+    price DECIMAL(10, 2) NOT NULL,
     calories INT NOT NULL,
     is_available BOOLEAN DEFAULT TRUE,
     CHECK (price > 0),
@@ -55,11 +55,11 @@ CREATE TABLE ewha.menu_item (
     CONSTRAINT fk_menu_category FOREIGN KEY (category_id) REFERENCES menu_category(id) ON DELETE CASCADE
 );
 
-CREATE TABLE ewha.menu_price_history (
+CREATE TABLE IF NOT EXISTS ewha.menu_price_history (
     id INT PRIMARY KEY AUTO_INCREMENT,
     menu_item_id INT NOT NULL,
-    old_price DECIMAL(10,2) NOT NULL,
-    new_price DECIMAL(10,2) NOT NULL,
+    old_price DECIMAL(10, 2) NOT NULL,
+    new_price DECIMAL(10, 2) NOT NULL,
     change_date DATE NOT NULL,
     CONSTRAINT fk_price_menu_item FOREIGN KEY (menu_item_id) REFERENCES menu_item(id) ON DELETE CASCADE,
     CHECK (old_price > 0),
@@ -67,7 +67,7 @@ CREATE TABLE ewha.menu_price_history (
     CHECK (old_price != new_price)
 );
 
-CREATE TABLE ewha.orders (
+CREATE TABLE IF NOT EXISTS ewha.orders (
     id INT PRIMARY KEY AUTO_INCREMENT,
     customer_id INT NOT NULL,
     restaurant_id INT NOT NULL,
@@ -76,31 +76,31 @@ CREATE TABLE ewha.orders (
     CONSTRAINT fk_order_restaurant FOREIGN KEY (restaurant_id) REFERENCES restaurants(id)
 );
 
-CREATE TABLE ewha.order_item (
+CREATE TABLE IF NOT EXISTS ewha.order_item (
     id INT PRIMARY KEY AUTO_INCREMENT,
     order_id INT NOT NULL,
     menu_item_id INT NOT NULL,
     quantity INT NOT NULL,
-    item_price_at_order DECIMAL(10,2) NOT NULL,
+    item_price_at_order DECIMAL(10, 2) NOT NULL,
     CONSTRAINT fk_orderitem_order FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE,
     CONSTRAINT fk_orderitem_menuitem FOREIGN KEY (menu_item_id) REFERENCES menu_item(id),
     CHECK (quantity > 0),
     CHECK (item_price_at_order > 0)
 );
 
-CREATE TABLE ewha.bill (
+CREATE TABLE IF NOT EXISTS ewha.bill (
     id INT PRIMARY KEY AUTO_INCREMENT,
     order_id INT NOT NULL UNIQUE,
-    subtotal DECIMAL(10,2) NOT NULL,
-    tax_amount DECIMAL(10,2) NOT NULL,
-    final_total DECIMAL(10,2) NOT NULL,
+    subtotal DECIMAL(10, 2) NOT NULL,
+    tax_amount DECIMAL(10, 2) NOT NULL,
+    final_total DECIMAL(10, 2) NOT NULL,
     CONSTRAINT fk_bill_order FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE,
     CHECK (subtotal >= 0),
     CHECK (tax_amount >= 0),
     CHECK (final_total >= subtotal)
 );
 
-CREATE TABLE ewha.delivery_drivers (
+CREATE TABLE IF NOT EXISTS ewha.delivery_drivers (
     id INT PRIMARY KEY AUTO_INCREMENT,
     first_name VARCHAR(32) NOT NULL,
     last_name VARCHAR(32) NOT NULL,
@@ -110,43 +110,43 @@ CREATE TABLE ewha.delivery_drivers (
     CHECK (phone REGEXP '^\\+82 10-[0-9]{4}-[0-9]{4}$')
 );
 
--- CREATE TABLE ewha.promotion (
---     id INT PRIMARY KEY AUTO_INCREMENT,
---     menu_item_id INT NOT NULL,
---     discount DECIMAL(5,2) NOT NULL,
---     start_date DATE NOT NULL,
---     end_date DATE NOT NULL,
---     CONSTRAINT fk_promotion_menuitem FOREIGN KEY (menu_item_id) REFERENCES menu_item(id) ON DELETE CASCADE,
---     CHECK (discount >= 0 AND discount <= 100),
---     CHECK (end_date >= start_date)
--- );
+CREATE INDEX menu_item_name_index ON ewha.menu_item(item_name);
+CREATE INDEX order_timestamp_index ON ewha.orders(order_timestamp);
+CREATE INDEX customer_city_index ON ewha.customer(city);
+CREATE INDEX restaurant_city_index ON ewha.restaurants(city);
 
-CREATE INDEX idx_menu_item_name
-ON ewha.menu_item(item_name);
+CREATE OR REPLACE VIEW ewha.order_details_view AS
+SELECT
+    ewha.orders.id AS order_id,
+    ewha.orders.order_timestamp,
+    ewha.customer.id AS customer_id,
+    ewha.customer.first_name,
+    ewha.customer.last_name,
+    ewha.restaurants.id AS restaurant_id,
+    ewha.restaurants.name AS restaurant_name,
+    ewha.bill.subtotal,
+    ewha.bill.tax_amount,
+    ewha.bill.final_total,
+    ewha.order_item.menu_item_id,
+    ewha.menu_item.item_name,
+    ewha.order_item.quantity,
+    ewha.order_item.item_price_at_order
+FROM ewha.orders
+JOIN ewha.customer ON ewha.orders.customer_id = ewha.customer.id
+JOIN ewha.restaurants ON ewha.orders.restaurant_id = ewha.restaurants.id
+JOIN ewha.bill ON ewha.bill.order_id = ewha.orders.id
+JOIN ewha.order_item ON ewha.order_item.order_id = ewha.orders.id
+JOIN ewha.menu_item ON ewha.menu_item.id = ewha.order_item.menu_item_id;
 
-CREATE INDEX idx_order_timestamp
-ON ewha.orders(order_timestamp);
-
-CREATE INDEX idx_customer_city
-ON ewha.customer(city);
-
-CREATE INDEX idx_restaurant_city
-ON ewha.restaurants(city);
-
--- CREATE VIEW customer_order_summary_view AS
--- SELECT
---     c.id AS customer_id,
---     c.first_name,
---     c.last_name,
---     co.id AS order_id,
---     co.order_timestamp,
---     b.final_total
--- FROM ewha.customer c
--- JOIN ewha.customer_order co ON c.id = co.customer_id
--- JOIN ewha.bill b ON co.id = b.order_id;
-
--- CREATE VIEW restaurant_sales_view AS
--- SELECT r.name AS restaurant_name, DATE(co.order_timestamp) AS sales_date, SUM(b.final_total) AS daily_sales FROM ewha.restaurants r
--- JOIN ewha.customer_order co ON r.id = co.restaurant_id
--- JOIN ewha.bill b ON co.id = b.order_id
--- GROUP BY r.name, DATE(co.order_timestamp);
+CREATE OR REPLACE VIEW ewha.customer_spending_view AS
+SELECT
+    ewha.customer.id AS customer_id,
+    ewha.customer.first_name,
+    ewha.customer.last_name,
+    ewha.customer.email,
+    COUNT(ewha.orders.id) AS total_orders,
+    COALESCE(SUM(ewha.bill.final_total), 0) AS total_spent
+FROM ewha.customer
+LEFT JOIN ewha.orders ON ewha.customer.id = ewha.orders.customer_id
+LEFT JOIN ewha.bill ON ewha.orders.id = ewha.bill.order_id
+GROUP BY ewha.customer.id, ewha.customer.first_name, ewha.customer.last_name, ewha.customer.email;

@@ -3,11 +3,19 @@ package delivery.service;
 import delivery.db.DatabaseConnection;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.sql.Statement;
 import java.util.Scanner;
+import java.util.regex.Pattern;
 
 public final class CustomerService {
-    
+
+    private static final Pattern EMAIL_PATTERN =
+            Pattern.compile("^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$");
+    private static final Pattern PHONE_PATTERN =
+            Pattern.compile("^\\+82 10-[0-9]{4}-[0-9]{4}$");
+
     private static Scanner scanner = new Scanner(System.in);
     
     private CustomerService() {}
@@ -15,29 +23,64 @@ public final class CustomerService {
     // MENU 1: Insert Customer
     public static void insertCustomer() {
         System.out.println("\n=== INSERT CUSTOMER ===");
+        System.out.println("Phone format: +82 10-XXXX-XXXX (e.g. +82 10-1234-5678)");
+        System.out.println("Gender: 1=Male, 2=Female, 3=Other");
         
         try (Connection conn = DatabaseConnection.getConnection()) {
-            String firstName = getStringInput("Enter first name: ");
-            String lastName = getStringInput("Enter last name: ");
-            String email = getStringInput("Enter email: ");
-            String phone = getStringInput("Enter phone: ");
-            String city = getStringInput("Enter city: ");
-            int age = getIntInput("Enter age: ");
-            String gender = getStringInput("Enter gender: ");
-            
-            String sql = "INSERT INTO customer (first_name, last_name, email, phone, city, age, gender) VALUES (?, ?, ?, ?, ?, ?, ?)";
-            try (PreparedStatement stmt = conn.prepareStatement(sql)) {
-                stmt.setString(1, firstName);
-                stmt.setString(2, lastName);
-                stmt.setString(3, email);
-                stmt.setString(4, phone);
-                stmt.setString(5, city);
-                stmt.setInt(6, age);
-                stmt.setString(7, gender);
-                
-                if (stmt.executeUpdate() > 0) {
-                    System.out.println("\n✓ Customer registered successfully!");
+            String firstName = getRequiredStringInput("Enter first name: ");
+            String lastName = getRequiredStringInput("Enter last name: ");
+            String email = getValidEmailInput("Enter email: ");
+            String phone = getValidPhoneInput("Enter phone: ");
+            String city = getRequiredStringInput("Enter city: ");
+            int age = getIntInputInRange("Enter age: ", 0, 120);
+            String gender = getGenderInput();
+
+            conn.setAutoCommit(false);
+
+            try {
+                String sql = "INSERT INTO customer (first_name, last_name, email, phone, city, age, gender) VALUES (?, ?, ?, ?, ?, ?, ?)";
+                int customerId;
+                try (PreparedStatement stmt = conn.prepareStatement(sql, Statement.RETURN_GENERATED_KEYS)) {
+                    stmt.setString(1, firstName);
+                    stmt.setString(2, lastName);
+                    stmt.setString(3, email);
+                    stmt.setString(4, phone);
+                    stmt.setString(5, city);
+                    stmt.setInt(6, age);
+                    stmt.setString(7, gender);
+
+                    if (stmt.executeUpdate() == 0) {
+                        conn.rollback();
+                        System.out.println("Customer registration failed.");
+                        return;
+                    }
+
+                    try (ResultSet keys = stmt.getGeneratedKeys()) {
+                        if (!keys.next()) {
+                            conn.rollback();
+                            System.out.println("Customer registration failed.");
+                            return;
+                        }
+                        customerId = keys.getInt(1);
+                    }
                 }
+
+                String historySql = "INSERT INTO customer_demographic_history (customer_id, city, age_range, gender, start_date, end_date) VALUES (?, ?, ?, ?, CURRENT_DATE, NULL)";
+                try (PreparedStatement stmt = conn.prepareStatement(historySql)) {
+                    stmt.setInt(1, customerId);
+                    stmt.setString(2, city);
+                    stmt.setString(3, getAgeRange(age));
+                    stmt.setString(4, gender);
+                    stmt.executeUpdate();
+                }
+
+                conn.commit();
+                System.out.println("\n✓ Customer registered successfully! (ID: " + customerId + ")");
+            } catch (SQLException e) {
+                conn.rollback();
+                throw e;
+            } finally {
+                conn.setAutoCommit(true);
             }
         } catch (SQLException e) {
             System.err.println("Error registering customer: " + e.getMessage());
@@ -217,6 +260,58 @@ public final class CustomerService {
     
     private static String getStringInput(String prompt) {
         System.out.print(prompt);
-        return scanner.nextLine();
+        return scanner.nextLine().trim();
+    }
+
+    private static String getRequiredStringInput(String prompt) {
+        while (true) {
+            String value = getStringInput(prompt);
+            if (!value.isEmpty()) {
+                return value;
+            }
+            System.out.println("This field is required.");
+        }
+    }
+
+    private static String getValidEmailInput(String prompt) {
+        while (true) {
+            String email = getStringInput(prompt);
+            if (EMAIL_PATTERN.matcher(email).matches()) {
+                return email;
+            }
+            System.out.println("Invalid email. Example: name@example.com");
+        }
+    }
+
+    private static String getValidPhoneInput(String prompt) {
+        while (true) {
+            String phone = getStringInput(prompt);
+            if (PHONE_PATTERN.matcher(phone).matches()) {
+                return phone;
+            }
+            System.out.println("Invalid phone. Use format +82 10-XXXX-XXXX");
+        }
+    }
+
+    private static String getGenderInput() {
+        while (true) {
+            int choice = getIntInput("Enter gender (1=Male, 2=Female, 3=Other): ");
+            switch (choice) {
+                case 1 -> { return "Male"; }
+                case 2 -> { return "Female"; }
+                case 3 -> { return "Other"; }
+                default -> System.out.println("Please enter 1, 2, or 3.");
+            }
+        }
+    }
+
+    private static int getIntInputInRange(String prompt, int min, int max) {
+        while (true) {
+            int value = getIntInput(prompt);
+            if (value >= min && value <= max) {
+                return value;
+            }
+            System.out.println("Enter a number between " + min + " and " + max + ".");
+        }
     }
 }
