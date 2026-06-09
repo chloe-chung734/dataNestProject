@@ -16,6 +16,6 @@ public final class OrderMenu {
     }
 
     public static void searchCustomerOrders() {
-        System.out.println("Search Customer Orders - Coming Soon");
+        OrderService.searchCustomerOrders();
     }
 }
